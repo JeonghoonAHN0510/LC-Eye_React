@@ -1,0 +1,56 @@
+.header {
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 3px solid #2F3E77;
+    width: 1440px;
+    height: 5rem;
+}
+
+.header img {
+    width: 13.5rem;
+    height: 4rem;
+}
+
+.projectRigthTop {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    border-bottom: 3px solid #dddddd;
+}
+
+.projectNameBox {
+    font-size: 1.7rem;
+    font-weight: bold;
+}
+
+.sectionName {
+    font-size: 1.3rem;
+    font-weight: bold;
+}
+
+.imgBox {
+    display: flex;
+    align-items: center;
+}
+
+.projectRightBot {
+    padding: 0.5rem;
+}
+
+.infoBox {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.infoMname {
+    font-weight: bold;
+    font-size: 1.2rem;
+}
+
+.infoBox button {
+    border: none;
+    background: none;
+    cursor: pointer;
+}

@@ -1,0 +1,23 @@
+.headButton {
+    margin: 0.5rem;
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+}
+
+.headButton> :nth-child(1) {
+    margin-right: 0.5rem;
+}
+
+.unitSelectArea {
+    display: flex;
+}
+
+.unitSelectArea> :nth-child(1),
+.unitSelectArea> :nth-child(2) {
+    width: 50%;
+}
+
+.bottomMargin {
+    margin-bottom: 1rem;
+}
