@@ -236,7 +236,7 @@ const storageKey = useMemo(
 
   return (
     <div className="rzTable-wrap">
-      <div className="rzTable-scroll" ref={scrollRef}>
+      <div className="rzTable-scroll admin-scope" ref={scrollRef}>
         <table
           ref={tableRef}
           className={`rzTable ${stickyFirst ? "has-sticky-first" : ""}`}

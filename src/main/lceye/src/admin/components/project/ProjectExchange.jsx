@@ -8,8 +8,11 @@ import Typography from '@mui/joy/Typography';
 import { useLocation } from "react-router-dom";
 import Button from '@mui/joy/Button';
 import Box from '@mui/joy/Box';
+import {useSelector} from 'react-redux';
 
 export default function ProjectExchange(props){
+    // 프로젝트 번호 상태
+    const selectedProjectInfo = useSelector((state) => state.project.selectedProject);
 
     // 쿼리 파라미터 가져오기
     const location = useLocation();
@@ -138,7 +141,7 @@ export default function ProjectExchange(props){
     const matchIO = async (pjenames) => {
         try {
             const response = await axios.post(
-                "http://localhost:8080/api/inout/auto",
+                "http://localhost:8081/api/inout/auto",
                 pjenames,
                 { withCredentials: true }
             );
@@ -191,8 +194,9 @@ export default function ProjectExchange(props){
 
     // 초기화
     const clearIOInfo = async () => {
+        const pjno = selectedProjectInfo.pjno;
         try{
-            const response = await axios.delete(`http://localhost:8080/api/inout?pjno=${pjno}`,  { withCredentials: true });
+            const response = await axios.delete(`http://localhost:8081/api/inout?pjno=${pjno}`,  { withCredentials: true });
             const data = response.data;
             if(data){
                 alert("초기화 되었습니다.");
@@ -241,12 +245,13 @@ export default function ProjectExchange(props){
     // 투입물·산출물 저장
     const saveIOInfo = async () => {
         const obj = {
-            pjno : pjno ,
-            exchanges : [...inputRows , ...outputRows]
+            pjno : selectedProjectInfo ,
+            exchanges : [ ...inputRows , ...outputRows]
         };
         try{
-            const response = await axios.post("http://localhost:8080/api/inout",obj ,  { withCredentials: true });
+            const response = await axios.post("http://localhost:8081/api/inout",obj ,  { withCredentials: true });
             const data = response.data;
+            console.log(data);
             if(data){
                 alert('저장 성공');
             }else{
@@ -304,8 +309,8 @@ export default function ProjectExchange(props){
                             borderRadius: 1
                         }}
                         >
-                        {item.value.map(val => (
-                            <Box key={val} sx={{ display: "flex", alignItems: "center", marginBottom: 0.5 }}>
+                        {item.value.map((val,index) => (
+                            <Box key={index} sx={{ display: "flex", alignItems: "center", marginBottom: 0.5 }}>
                             <Checkbox
                                 checked={checkedItems[item.key] === val}
                                 onChange={() => handleCheckValue(item.key, val)}

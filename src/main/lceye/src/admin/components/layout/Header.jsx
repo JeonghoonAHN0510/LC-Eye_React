@@ -41,6 +41,7 @@ export default function Header(props) {
                     <span className='infoMname'>
                         {isLogin.mname}
                     </span>
+                    <span> </span>
                     ({
                         isLogin.role == "ADMIN" ? "시스템 관리자"
                             : isLogin.role == "MANAGER" ? "회사 관리자"
@@ -49,6 +50,8 @@ export default function Header(props) {
                 </div>
                 <div>
                     소속 : {isLogin.cname}
+                </div>
+                <div className='logoutButton'>
                     <button onClick={logout}>로그아웃</button>
                 </div>
             </div>

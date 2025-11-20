@@ -1,12 +1,16 @@
-.projectLeftSessionBox {
-    margin: 1.5rem;
+.projectListNameBox {
+    font-size: 1.75rem;
+    font-weight: bold;
+    margin: 0.5rem 0 0.5rem 1rem;
     max-width: 100%;
-    overflow-x: auto; /* 테이블이 오른쪽 영역을 침범하지 않도록 가로 스크롤 */
+    overflow-x: auto;
+    /* 테이블이 오른쪽 영역을 침범하지 않도록 가로 스크롤 */
 }
+
 
 /* 프로젝트 목록 테이블 - 설명 컬럼 최대 200px + 말줄임표 */
 .projectLeftSessionBox .rzTable col:nth-child(3) {
-    width: 200px !important;
+    width: 200px;
     max-width: 300px;
 }
 
@@ -16,4 +20,8 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.projectListBox{
+    margin: 1rem 0.5rem 0 1rem;
 }

@@ -6,14 +6,31 @@ import Textarea from "@mui/joy/Textarea";
 import Input from "@mui/joy/Input";
 import Select from "@mui/joy/Select";
 import Option from "@mui/joy/Option";
+import FormHelperText from "@mui/joy/FormHelperText";
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
+import {
+    clearSelectedProject,
+    setSelectedProject,
+    incrementProjectListVersion,
+    setBasicInfoDirty,
+} from "../../store/projectSlice.jsx";
 
 export default function ProjectBasicInfo(props) {
-    const selectedProject = useSelector((state) => state.project?.selectedProject);
+    // redux store =============================================
+    const selectedProject = useSelector(
+        (state) => state.project?.selectedProject
+    );
+    const { isLogin } = useSelector((state) => state.admin);
+    const dispatch = useDispatch();
 
-    // 폼에서 수정 가능한 값들(프로젝트명, 설명, 생산량, 단위)
+    // 단위/부서 선택 관련 상태 =============================================
+    const [units, setUnits] = useState([]);
+    const [selectedGroup, setSelectedGroup] = useState(null);
+    const [selectedUnitUno, setSelectedUnitUno] = useState(null);
+
+    // 폼에 바인딩되는 값들(프로젝트 명, 설명, 예산, 부서) =================
     const [form, setForm] = useState({
         pjname: "",
         pjdesc: "",
@@ -21,11 +38,14 @@ export default function ProjectBasicInfo(props) {
         uno: null,
     });
 
-     const [units, setUnits] = useState([]);
-    const [selectedGroup, setSelectedGroup] = useState(null);
-    const [selectedUnitUno, setSelectedUnitUno] = useState(null);
+    // 인라인 검증용 에러 메시지 =============================================
+    const [errors, setErrors] = useState({
+        pjname: "",
+        pjamount: "",
+        uno: "",
+    });
 
-    // 선택된 프로젝트가 바뀌면 폼 값 초기화
+    // 선택된 프로젝트가 바뀌면 폼 초기화 / 세팅 =============================
     useEffect(() => {
         if (!selectedProject) {
             setForm({
@@ -33,6 +53,11 @@ export default function ProjectBasicInfo(props) {
                 pjdesc: "",
                 pjamount: "",
                 uno: null,
+            });
+            setErrors({
+                pjname: "",
+                pjamount: "",
+                uno: "",
             });
             return;
         }
@@ -43,13 +68,18 @@ export default function ProjectBasicInfo(props) {
             pjamount: selectedProject.pjamount ?? "",
             uno: selectedProject.uno ?? null,
         });
+        setErrors({
+            pjname: "",
+            pjamount: "",
+            uno: "",
+        });
     }, [selectedProject]);
 
-     // 단위 목록 조회
+    // 단위(부서) 목록 조회 ==================================================
     useEffect(() => {
         const fetchUnits = async () => {
             try {
-                const res = await axios.get("http://localhost:8080/api/units", {
+                const res = await axios.get("http://localhost:8081/api/units", {
                     withCredentials: true,
                 });
                 const data = Array.isArray(res.data) ? res.data : [];
@@ -61,7 +91,7 @@ export default function ProjectBasicInfo(props) {
         fetchUnits();
     }, []);
 
-    // 단위 그룹 목록 (중복 ugno 제거)
+    // unitGroups 중복 제거 후 그룹 목록 ====================================
     const unitGroups = useMemo(() => {
         const map = new Map();
         units.forEach((u) => {
@@ -70,13 +100,13 @@ export default function ProjectBasicInfo(props) {
         return Array.from(map, ([ugno, ugname]) => ({ ugno, ugname }));
     }, [units]);
 
-    // 선택된 그룹에 해당하는 단위들
+    // 선택된 그룹에 해당하는 units 목록 ====================================
     const filteredUnits = useMemo(
         () => units.filter((u) => u.ugno === selectedGroup),
         [units, selectedGroup]
     );
 
-    // 선택된 프로젝트 + 단위 목록이 준비되면 단위 선택 상태 동기화
+    // 선택된 프로젝트 + 부서 목록 준비되면 부서 선택 상태 세팅 =============
     useEffect(() => {
         if (!selectedProject || !units.length || !selectedProject.uno) {
             setSelectedGroup(null);
@@ -95,53 +125,173 @@ export default function ProjectBasicInfo(props) {
         }
     }, [selectedProject, units]);
 
+    // Input type = datetime-local 에 맞게 변환 ==============================
     const formatDate = (value) => {
         if (!value) return "";
         if (typeof value === "string") {
-            return value.slice(0, 10);
+            // 서버: "2025-11-19T10:55:10.984161" -> "2025-11-19T10:55"
+            return value.slice(0, 16);
         }
         return "";
     };
 
-    // 이후 저장 API에 사용할 수 있도록 현재 폼 데이터를 모아서 처리 (★★)
-    const handleSave = () => {
-        const payload = {
-            ...form,
-            pjno: selectedProject?.pjno ?? null,
+    // 저장 버튼: 신규/수정 저장 후 다시 조회 ================================
+    const saveProjectInfo = async () => {
+        const pjno = selectedProject?.pjno ?? null;
+
+        // 인라인 검증 --------------------------------------------------------
+        const nextErrors = {
+            pjname: "",
+            pjamount: "",
+            uno: "",
         };
-        console.log("project basic info to save:", payload);
+
+        if (!form.pjname || !form.pjname.trim()) {
+            nextErrors.pjname = "프로젝트 명을 입력해 주세요.";
+        }
+
+        const amountNumber = Number(form.pjamount);
+        if (!form.pjamount || Number.isNaN(amountNumber) || amountNumber <= 0) {
+            nextErrors.pjamount = "제품 생산량을 0보다 큰 숫자로 입력해 주세요.";
+        }
+
+        if (!form.uno) {
+            nextErrors.uno = "상세 단위를 선택해 주세요.";
+        }
+
+        const hasError = Object.values(nextErrors).some((msg) => !!msg);
+        if (hasError) {
+            setErrors(nextErrors);
+            return;
+        }
+
+        // 검증 통과 시 기존 에러 초기화
+        setErrors({
+            pjname: "",
+            pjamount: "",
+            uno: "",
+        });
+
+        // 공통 payload (신규/수정 모두 사용)
+        const basePayload = {
+            pjname: form.pjname,
+            pjdesc: form.pjdesc,
+            uno: form.uno,
+            pjamount: form.pjamount,
+        };
+
+        try {
+            let response;
+
+            // pjno 가 null 또는 0 이면 신규 -> POST =========================
+            if (!pjno || pjno === 0) {
+                response = await axios.post(
+                    "http://localhost:8081/api/project",
+                    basePayload,
+                    { withCredentials: true }
+                );
+            } else {
+                // pjno 가 있으면 수정 -> PUT ================================
+                response = await axios.put(
+                    "http://localhost:8081/api/project",
+                    { pjno, ...basePayload },
+                    { withCredentials: true }
+                );
+            }
+
+            // 저장 성공 여부 확인 ===========================================
+            const saved = response?.data;
+            const savedPjno = saved?.pjno;
+            if (!savedPjno) {
+                console.error(
+                    "[saveProjectInfo] 저장 결과에 pjno 가 없습니다.",
+                    saved
+                );
+                alert("저장에 실패했습니다.");
+                return;
+            }
+            alert("저장이 완료되었습니다.");
+
+            // 저장된 pjno 로 다시 프로젝트 조회 + 리스트 갱신 트리거 ========
+            try {
+                const r = await axios.get(
+                    `http://localhost:8081/api/project?pjno=${savedPjno}`,
+                    { withCredentials: true }
+                );
+                // 기본정보 재세팅
+                dispatch(setSelectedProject(r.data));
+                // 프로젝트 목록 재조회용 버전 증가
+                dispatch(incrementProjectListVersion());
+            } catch (e) {
+                console.error("[saveProjectInfo/readProject error]", e);
+            }
+        } catch (e) {
+            console.error("[saveProjectInfo error]", e);
+        }
     };
 
+    // 초기화 버튼: 선택된 프로젝트 해제 -> 폼/에러 초기화 ====================
+    const resetBasicInfo = () => {
+        dispatch(clearSelectedProject());
+        setErrors({
+            pjname: "",
+            pjamount: "",
+            uno: "",
+        });
+    };
 
+    // 폼 변경 시 basicInfoDirty 플래그 설정을 위한 헬퍼 ======================
+    const markDirtyAndSetForm = (updater) => {
+        dispatch(setBasicInfoDirty(true));
+        setForm((prev) => updater(prev));
+    };
+
+    // return =================================================================
     return (
         <>
             <div>
                 <div className="headButton">
-                    <Button variant="outlined" onClick={handleSave}>
+                    <Button variant="outlined" onClick={saveProjectInfo}>
                         저장
                     </Button>
-                    <Button variant="outlined">초기화</Button>
+                    <Button variant="outlined" onClick={resetBasicInfo}>
+                        초기화
+                    </Button>
                 </div>
-                <FormControl className="bottomMargin">
-                    <FormLabel>프로젝트 명</FormLabel>
+                <FormControl
+                    className="bottomMargin"
+                    error={!!errors.pjname}
+                >
+                    <FormLabel className="projectLabel">프로젝트 명</FormLabel>
                     <Input
                         value={form.pjname}
-                        onChange={(e) =>
-                            setForm((prev) => ({
+                        onChange={(e) => {
+                            if (errors.pjname) {
+                                setErrors((prev) => ({
+                                    ...prev,
+                                    pjname: "",
+                                }));
+                            }
+                            markDirtyAndSetForm((prev) => ({
                                 ...prev,
                                 pjname: e.target.value,
-                            }))
-                        }
+                            }));
+                        }}
                     />
+                    {errors.pjname && (
+                        <FormHelperText>{errors.pjname}</FormHelperText>
+                    )}
                 </FormControl>
                 <FormControl className="bottomMargin">
-                    <FormLabel>프로젝트 설명</FormLabel>
+                    <FormLabel className="projectLabel">
+                        프로젝트 설명
+                    </FormLabel>
                     <Textarea
                         minRows={3}
                         maxRows={5}
                         value={form.pjdesc}
                         onChange={(e) =>
-                            setForm((prev) => ({
+                            markDirtyAndSetForm((prev) => ({
                                 ...prev,
                                 pjdesc: e.target.value,
                             }))
@@ -149,35 +299,61 @@ export default function ProjectBasicInfo(props) {
                     />
                 </FormControl>
                 <FormControl className="bottomMargin">
-                    <FormLabel>작성자</FormLabel>
-                    <Input value={selectedProject?.mname || ""} readOnly />
+                    <FormLabel className="projectLabel">작성자</FormLabel>
+                    <Input
+                        value={selectedProject?.mname || isLogin?.mname || ""}
+                        readOnly
+                    />
                 </FormControl>
-                <FormControl className="bottomMargin">
-                    <FormLabel type="number">제품 생산량</FormLabel>
+                <FormControl
+                    className="bottomMargin"
+                    error={!!errors.pjamount}
+                >
+                    <FormLabel className="projectLabel">
+                        대상 제품 생산량
+                    </FormLabel>
                     <Input
                         type="number"
                         value={form.pjamount}
-                        onChange={(e) =>
-                            setForm((prev) => ({
+                        onChange={(e) => {
+                            if (errors.pjamount) {
+                                setErrors((prev) => ({
+                                    ...prev,
+                                    pjamount: "",
+                                }));
+                            }
+                            markDirtyAndSetForm((prev) => ({
                                 ...prev,
                                 pjamount: e.target.value,
-                            }))
-                        }
+                            }));
+                        }}
                     />
+                    {errors.pjamount && (
+                        <FormHelperText>{errors.pjamount}</FormHelperText>
+                    )}
                 </FormControl>
                 <div className="unitSelectArea bottomMargin">
                     <FormControl>
-                        <FormLabel>단위 그룹</FormLabel>
+                        <FormLabel className="projectLabel">
+                            단위 그룹
+                        </FormLabel>
                         <Select
                             placeholder="단위 그룹 선택"
                             value={selectedGroup}
                             onChange={(event, newValue) => {
+                                dispatch(setBasicInfoDirty(true));
                                 setSelectedGroup(newValue);
                                 setSelectedUnitUno(null);
                                 setForm((prev) => ({
                                     ...prev,
                                     uno: null,
                                 }));
+                                if (errors.uno) {
+                                    setErrors((prev) => ({
+                                        ...prev,
+                                        uno: "",
+                                    }));
+                                }
                             }}
                         >
                             {unitGroups.map((g) => (
@@ -188,17 +364,24 @@ export default function ProjectBasicInfo(props) {
                         </Select>
                     </FormControl>
 
-                    <FormControl>
-                        <FormLabel>단위</FormLabel>
+                    <FormControl error={!!errors.uno}>
+                        <FormLabel className="projectLabel">상세 단위</FormLabel>
                         <Select
-                            placeholder="단위 선택"
+                            placeholder="상세 단위 선택"
                             value={selectedUnitUno}
                             onChange={(event, newValue) => {
+                                dispatch(setBasicInfoDirty(true));
                                 setSelectedUnitUno(newValue);
                                 setForm((prev) => ({
                                     ...prev,
                                     uno: newValue,
                                 }));
+                                if (errors.uno) {
+                                    setErrors((prev) => ({
+                                        ...prev,
+                                        uno: "",
+                                    }));
+                                }
                             }}
                             disabled={!selectedGroup}
                         >
@@ -208,27 +391,36 @@ export default function ProjectBasicInfo(props) {
                                 </Option>
                             ))}
                         </Select>
+                        {errors.uno && (
+                            <FormHelperText>{errors.uno}</FormHelperText>
+                        )}
                     </FormControl>
                 </div>
                 <div className="unitSelectArea bottomMargin">
                     <FormControl>
-                        <FormLabel>등록일</FormLabel>
+                        <FormLabel className="projectLabel">등록일</FormLabel>
                         <Input
-                            type="date"
+                            type="datetime-local"
                             readOnly
                             value={formatDate(selectedProject?.createdate)}
                         />
+
                     </FormControl>
                     <FormControl>
-                        <FormLabel>수정일</FormLabel>
+                        <FormLabel className="projectLabel">수정일</FormLabel>
                         <Input
-                            type="date"
+                            type="datetime-local"
                             readOnly
                             value={formatDate(selectedProject?.updatedate)}
                         />
                     </FormControl>
+
                 </div>
+                <FormHelperText>
+                    ※ 등록일/수정일이 자동으로 입력되며, 수정할 수정할 수 없습니다.
+                </FormHelperText>
             </div>
         </>
-    );
-}
+    ); // return end
+} // component end
+

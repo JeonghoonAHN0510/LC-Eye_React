@@ -1,5 +1,4 @@
 .headButton {
-    margin: 0.5rem;
     display: flex;
     flex-direction: row;
     justify-content: flex-end;
@@ -11,13 +10,18 @@
 
 .unitSelectArea {
     display: flex;
+    justify-content: space-between;
 }
 
 .unitSelectArea> :nth-child(1),
 .unitSelectArea> :nth-child(2) {
-    width: 50%;
+    width: 49%;
 }
 
 .bottomMargin {
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.projectLabel {
+    font-size: 1rem !important;
 }
