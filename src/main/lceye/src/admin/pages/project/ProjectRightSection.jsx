@@ -26,7 +26,7 @@ export default function ProjectRightSection(props) {
     const [exchangeOpen, setExchangeOpen] = useState(false);
     const [resultOpen, setResultOpen] = useState(false);
 
-    // 기본정보가 초기화되었거나 dirty 상태이면 하단 아코디언 접기
+    // 기본 정보가 초기화되지 않았거나 dirty 상태이면 하위 아코디언 닫기
     useEffect(() => {
         if (!canOpenSubAccordions) {
             setExchangeOpen(false);
@@ -34,10 +34,16 @@ export default function ProjectRightSection(props) {
         }
     }, [canOpenSubAccordions]);
 
+    // 좌측 프로젝트 목록에서 pjno가 변경되면 투입물·산출물 아코디언 접기
+    useEffect(() => {
+        setExchangeOpen(false);
+        setResultOpen(false);
+    }, [selectedProject?.pjno]);
+
     return (
         <>
             <div className="projectRigthTop">
-                <div className="projectNameBox">프로젝트명</div>
+                <div className="projectNameBox">프로젝트</div>
             </div>
             <div className="projectRightBot">
                 <AccordionGroup
@@ -65,10 +71,17 @@ export default function ProjectRightSection(props) {
                         }}
                     >
                         <AccordionSummary>
-                            <div className="sectionName">투입물·산출물 정보</div>
+                            <div className="sectionName">
+                                투입물·산출물 정보
+                            </div>
                         </AccordionSummary>
                         <AccordionDetails>
-                            <ProjectExchange />
+                            <ProjectExchange
+                                key={selectedProject?.pjno ?? "none"}
+                                pjno={selectedProject?.pjno}
+                                isOpen={exchangeOpen}
+                                onCalcSuccess={() => setResultOpen(true)}
+                            />
                         </AccordionDetails>
                     </Accordion>
                     <Accordion

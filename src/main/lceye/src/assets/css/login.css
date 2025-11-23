@@ -1,11 +1,12 @@
 .loginRouter {
-    border: 1rem solid rgba(238,238,238,0.5);
+    border: 1rem solid rgba(238, 238, 238, 0.5);
     border-radius: 3rem;
-    width: 80%;
-    height: 55%;
+    width: 160vh;
+    height: 70vh;
     display: flex;
     justify-content: space-evenly;
     align-items: center;
+    margin: auto;
 }
 
 /* ============================== leftSection ============================== */
@@ -22,6 +23,7 @@
 .loginLogoBox {
     display: flex;
 }
+
 .loginLogoBox img {
     width: 20rem;
     margin-right: 1rem;
@@ -31,14 +33,14 @@
     margin-top: 1.5rem;
     font-size: 1.6rem;
     font-weight: bold;
-    color : #2F3E77 ;
+    color: #2F3E77;
 }
 
 .loginSectionText .subText {
     margin-top: 1rem;
     font-weight: 500;
     font-size: 1.2rem;
-    color : #555555 ;
+    color: #555555;
 }
 
 /* ============================== rightSection ============================== */
@@ -65,14 +67,14 @@
     margin: 0.8rem;
 }
 
-.rightSection .inputBox Button{
+.rightSection .inputBox Button {
     margin-top: 1rem;
     width: 6rem;
     height: 3rem;
     font-size: 1.2rem;
 }
 
-.loginCheckingText{
+.loginCheckingText {
     font-size: 1.2rem;
     font-weight: 600;
 }

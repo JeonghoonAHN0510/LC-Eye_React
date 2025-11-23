@@ -34,7 +34,7 @@ export default function Header(props) {
     return (
         <>
             <div className='imgBox'>
-                <img src={headerLogo} alt="headerLogo" />
+                <img src={headerLogo} alt="headerLogo" onClick={() => { location.href = "/project"; }}/>
             </div>
             <div className='infoBox'>
                 <div>

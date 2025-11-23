@@ -1,8 +1,8 @@
 .header {
     display: flex;
     justify-content: space-between;
-    border-bottom: 3px solid #2F3E77;
-    width: 1920px;
+    border-bottom: 5px solid #2F3E77;
+    width: 100%;
     height: 8rem;
 }
 
@@ -33,6 +33,7 @@
 .imgBox {
     display: flex;
     align-items: right;
+    align-items: center;
 }
 
 .infoBox div {
@@ -66,4 +67,8 @@
 
 .logoutButton {
     text-align: right;
+}
+
+.loginCheckingBox{
+    margin: auto;
 }

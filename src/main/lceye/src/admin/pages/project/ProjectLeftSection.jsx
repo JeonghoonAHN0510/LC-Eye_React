@@ -4,12 +4,14 @@ import { useDispatch, useSelector } from "react-redux";
 import ProjectListTable from "../../components/project/ProjectListTable.jsx";
 import { setSelectedProject } from "../../store/projectSlice.jsx";
 import "../../../assets/css/projectLeftSessionBox.css";
+import { useLoading } from "../../contexts/LoadingContext.jsx";
 
 export default function ProjectLeftSection(props) {
     const dispatch = useDispatch();
     const projectListVersion = useSelector(
         (state) => state.project?.projectListVersion
     );
+    const { showLoading, hideLoading } = useLoading();
 
     // 프로젝트 목록 상태 =====================================================
     const [projects, setProjects] = useState([]);
@@ -62,16 +64,20 @@ export default function ProjectLeftSection(props) {
         const pjno = row?.pjno;
         if (!pjno) return;
 
+        const loadingId = showLoading("로딩중입니다.");
+        const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         try {
-            const r = await axios.get(
-                `http://localhost:8081/api/project?pjno=${pjno}`,
-                {
+            const [r] = await Promise.all([
+                axios.get(`http://localhost:8081/api/project?pjno=${pjno}`, {
                     withCredentials: true,
-                }
-            );
+                }),
+                sleep(1000),
+            ]);
             dispatch(setSelectedProject(r.data));
         } catch (e) {
             console.error("[readProject error]", e);
+        } finally {
+            hideLoading(loadingId);
         }
     };
 

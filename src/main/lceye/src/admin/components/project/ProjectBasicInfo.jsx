@@ -4,10 +4,8 @@ import FormControl from "@mui/joy/FormControl";
 import FormLabel from "@mui/joy/FormLabel";
 import Textarea from "@mui/joy/Textarea";
 import Input from "@mui/joy/Input";
-import Select from "@mui/joy/Select";
-import Option from "@mui/joy/Option";
 import FormHelperText from "@mui/joy/FormHelperText";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -16,6 +14,8 @@ import {
     incrementProjectListVersion,
     setBasicInfoDirty,
 } from "../../store/projectSlice.jsx";
+import UnitSelector from "./UnitSelector.jsx";
+import useUnits from "../../hooks/useUnits";
 
 export default function ProjectBasicInfo(props) {
     // redux store =============================================
@@ -25,10 +25,8 @@ export default function ProjectBasicInfo(props) {
     const { isLogin } = useSelector((state) => state.admin);
     const dispatch = useDispatch();
 
-    // 단위/부서 선택 관련 상태 =============================================
-    const [units, setUnits] = useState([]);
-    const [selectedGroup, setSelectedGroup] = useState(null);
-    const [selectedUnitUno, setSelectedUnitUno] = useState(null);
+    // 단위 그룹/상세 단위 선택 관련 상태 =============================================
+    const { units } = useUnits();
 
     // 폼에 바인딩되는 값들(프로젝트 명, 설명, 예산, 부서) =================
     const [form, setForm] = useState({
@@ -75,55 +73,6 @@ export default function ProjectBasicInfo(props) {
         });
     }, [selectedProject]);
 
-    // 단위(부서) 목록 조회 ==================================================
-    useEffect(() => {
-        const fetchUnits = async () => {
-            try {
-                const res = await axios.get("http://localhost:8081/api/units", {
-                    withCredentials: true,
-                });
-                const data = Array.isArray(res.data) ? res.data : [];
-                setUnits(data);
-            } catch (e) {
-                console.error("[/api/units error]", e);
-            }
-        };
-        fetchUnits();
-    }, []);
-
-    // unitGroups 중복 제거 후 그룹 목록 ====================================
-    const unitGroups = useMemo(() => {
-        const map = new Map();
-        units.forEach((u) => {
-            if (!map.has(u.ugno)) map.set(u.ugno, u.ugname);
-        });
-        return Array.from(map, ([ugno, ugname]) => ({ ugno, ugname }));
-    }, [units]);
-
-    // 선택된 그룹에 해당하는 units 목록 ====================================
-    const filteredUnits = useMemo(
-        () => units.filter((u) => u.ugno === selectedGroup),
-        [units, selectedGroup]
-    );
-
-    // 선택된 프로젝트 + 부서 목록 준비되면 부서 선택 상태 세팅 =============
-    useEffect(() => {
-        if (!selectedProject || !units.length || !selectedProject.uno) {
-            setSelectedGroup(null);
-            setSelectedUnitUno(null);
-            return;
-        }
-
-        const unit = units.find((u) => u.uno === selectedProject.uno);
-        if (unit) {
-            setSelectedGroup(unit.ugno);
-            setSelectedUnitUno(unit.uno);
-            setForm((prev) => ({
-                ...prev,
-                uno: unit.uno,
-            }));
-        }
-    }, [selectedProject, units]);
 
     // Input type = datetime-local 에 맞게 변환 ==============================
     const formatDate = (value) => {
@@ -246,6 +195,19 @@ export default function ProjectBasicInfo(props) {
         setForm((prev) => updater(prev));
     };
 
+    const handleUnitChange = (uno) => {
+        if (errors.uno) {
+            setErrors((prev) => ({
+                ...prev,
+                uno: "",
+            }));
+        }
+        markDirtyAndSetForm((prev) => ({
+            ...prev,
+            uno,
+        }));
+    };
+
     // return =================================================================
     return (
         <>
@@ -309,9 +271,7 @@ export default function ProjectBasicInfo(props) {
                     className="bottomMargin"
                     error={!!errors.pjamount}
                 >
-                    <FormLabel className="projectLabel">
-                        대상 제품 생산량
-                    </FormLabel>
+                    <FormLabel className="projectLabel">제품 생산량</FormLabel>
                     <Input
                         type="number"
                         value={form.pjamount}
@@ -332,69 +292,19 @@ export default function ProjectBasicInfo(props) {
                         <FormHelperText>{errors.pjamount}</FormHelperText>
                     )}
                 </FormControl>
-                <div className="unitSelectArea bottomMargin">
-                    <FormControl>
-                        <FormLabel className="projectLabel">
-                            단위 그룹
-                        </FormLabel>
-                        <Select
-                            placeholder="단위 그룹 선택"
-                            value={selectedGroup}
-                            onChange={(event, newValue) => {
-                                dispatch(setBasicInfoDirty(true));
-                                setSelectedGroup(newValue);
-                                setSelectedUnitUno(null);
-                                setForm((prev) => ({
-                                    ...prev,
-                                    uno: null,
-                                }));
-                                if (errors.uno) {
-                                    setErrors((prev) => ({
-                                        ...prev,
-                                        uno: "",
-                                    }));
-                                }
-                            }}
-                        >
-                            {unitGroups.map((g) => (
-                                <Option key={g.ugno} value={g.ugno}>
-                                    {g.ugname}
-                                </Option>
-                            ))}
-                        </Select>
-                    </FormControl>
-
-                    <FormControl error={!!errors.uno}>
-                        <FormLabel className="projectLabel">상세 단위</FormLabel>
-                        <Select
-                            placeholder="상세 단위 선택"
-                            value={selectedUnitUno}
-                            onChange={(event, newValue) => {
-                                dispatch(setBasicInfoDirty(true));
-                                setSelectedUnitUno(newValue);
-                                setForm((prev) => ({
-                                    ...prev,
-                                    uno: newValue,
-                                }));
-                                if (errors.uno) {
-                                    setErrors((prev) => ({
-                                        ...prev,
-                                        uno: "",
-                                    }));
-                                }
-                            }}
-                            disabled={!selectedGroup}
-                        >
-                            {filteredUnits.map((u) => (
-                                <Option key={u.uno} value={u.uno}>
-                                    {u.unit}
-                                </Option>
-                            ))}
-                        </Select>
-                        {errors.uno && (
-                            <FormHelperText>{errors.uno}</FormHelperText>
-                        )}
-                    </FormControl>
+                <div className="bottomMargin">
+                    <UnitSelector
+                        units={units}
+                        value={form.uno}
+                        onChange={handleUnitChange}
+                        error={errors.uno}
+                        onErrorClear={() =>
+                            setErrors((prev) => ({
+                                ...prev,
+                                uno: "",
+                            }))
+                        }
+                    />
                 </div>
                 <div className="unitSelectArea bottomMargin">
                     <FormControl>
@@ -417,10 +327,9 @@ export default function ProjectBasicInfo(props) {
 
                 </div>
                 <FormHelperText>
-                    ※ 등록일/수정일이 자동으로 입력되며, 수정할 수정할 수 없습니다.
+                    ※ 등록일/수정일은 자동으로 입력되며, 수정할 수 없습니다.
                 </FormHelperText>
             </div>
         </>
     ); // return end
 } // component end
-

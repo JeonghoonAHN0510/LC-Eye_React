@@ -4,12 +4,10 @@
 }
 
 .inputResultBox {
-    border: 1px solid black;
     width: 49%;
 }
 
 .outputResultBox {
-    border: 1px solid black;
     width: 49%;
 }
 
@@ -23,7 +21,6 @@
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    margin-bottom: 1rem;
 }
 
 .projectResultTopBar > :nth-child(1){
@@ -31,4 +28,56 @@
     color : #7F7F7F;
     font-size: 0.92rem;
     font-weight: 600;
+}
+
+.projectResultPagination {
+    margin-top: 0.5rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.projectResultPagination .MuiPagination-ul {
+    justify-content: center;
+}
+
+.projectResultPagination .MuiPaginationItem-root.Mui-selected {
+    background-color: #2F3E77;
+    color: #ffffff;
+}
+
+.projectResultPagination .MuiPaginationItem-root.Mui-selected:hover {
+    background-color: #2F3E77;
+}
+
+.projectResultPagination input[type="number"] {
+    width: 4rem;
+    padding: 2px 4px;
+}
+
+.projectResultPagination .page-jump-button {
+    margin-left: 0.25rem;
+    padding: 2px 8px;
+    border: 1px solid #2F3E77;
+    background-color: #2F3E77;
+    color: #ffffff;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.projectResultPagination .page-jump-button:hover {
+    background-color: #25315f;
+}
+
+.projectResultBox  .rz-title {
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.projectResultBox  .admin-scope .rzTable thead th {
+    background-color: #2F3E77;
 }

@@ -1,93 +1,52 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "../../../assets/css/projectListTable.css";
-
-// ① 내부 훅을 파일 상단에 붙여넣기 (export 필요 없음)
-function useColWidths({ rememberKey, columns, minColWidth = 30 }) {
-  const initial = useMemo(
-    () => columns.map(c => Math.max(minColWidth, c.width ?? 80)),
-    [columns, minColWidth]
-  );
-  const fp = useMemo(
-    () => columns.map(c => `${c.id}:${c.width ?? ""}`).join("|"),
-    [columns]
-  );
-  const storageKey = useMemo(
-    () => (rememberKey ? `${rememberKey}@v3` : null),
-    [rememberKey]
-  );
-  const [widths, setWidths] = useState(initial);
-
-  useEffect(() => {
-    if (!storageKey) return;
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (!raw) { setWidths(initial); return; }
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) { setWidths(initial); return; }      // 레거시 무효화
-      if (parsed && parsed.fp === fp &&
-          Array.isArray(parsed.widths) &&
-          parsed.widths.length === columns.length) {
-        setWidths(parsed.widths);
-      } else {
-        setWidths(initial);
-      }
-    } catch {
-      setWidths(initial);
-    }
-  }, [storageKey, fp, initial, columns.length]);
-
-  const persist = useCallback((next) => {
-    setWidths(next);
-    if (!storageKey) return;
-    try { localStorage.setItem(storageKey, JSON.stringify({ fp, widths: next })); } catch {}
-  }, [storageKey, fp]);
-
-  return { widths, setWidths, persist, initial };
-}
 
 export default function PorjectListTable({
   columns = [],                // [{ id, title, width? }]
   data = [],                   // [{ [id]: value }]
   minColWidth = 30,
-  rememberKey,                 // 예: "PlaceInfo.columns"
+  rememberKey,                 // e.g. "ProjectListTable"
   stickyFirst = true,
   sortable = true,
-  resizeGrab = 10,              // 보더 감지 폭(px)
-  showGuide = false,           // 드래그 가이드선 표시 여부(옵션)
-  onRowClick
+  resizeGrab = 10,             // px 범위에서만 resize 허용
+  showGuide = false,           // 리사이즈 가이드 라인 표시 여부
+  onRowClick,
 }) {
-  // 초기 폭
-  const initial = useMemo(
-    () => columns.map(c => Math.max(minColWidth, c.width ?? 80)),
+  const initialWidths = useMemo(
+    () => columns.map((c) => Math.max(minColWidth, c.width ?? 80)),
     [columns, minColWidth]
   );
-  const [widths, setWidths] = useState(initial);
 
-// 저장 복원 키를 컬럼 지문 포함으로
-const storageKey = useMemo(
-   () => rememberKey ? `${rememberKey}@v1:${columns.map(c => c.id).join('|')}` : null,
-   [rememberKey, columns]
- );
-
+  const [widths, setWidths] = useState(initialWidths);
+  const storageKey = useMemo(
+    () => (rememberKey ? `${rememberKey}@v1:${columns.map((c) => c.id).join("|")}` : null),
+    [rememberKey, columns]
+  );
 
   const [sort, setSort] = useState({ key: null, dir: "asc" });
 
-  // 저장 복원
+  // 컬럼 너비 복원
   useEffect(() => {
     if (!storageKey) return;
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
       if (Array.isArray(saved) && saved.length === columns.length) {
-      setWidths(saved);
+        setWidths(saved);
+      }
+    } catch {
+      // ignore
     }
-    } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageKey]);
 
   const persist = (next) => {
     setWidths(next);
     if (!storageKey) return;
-    try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch {}
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(next));
+    } catch {
+      // ignore
+    }
   };
 
   // 정렬
@@ -96,20 +55,30 @@ const storageKey = useMemo(
     const dir = sort.dir === "desc" ? -1 : 1;
     const arr = [...data];
     arr.sort((a, b) => {
-      const va = a[sort.key], vb = b[sort.key];
-      const na = Number(va), nb = Number(vb);
-      if (!Number.isNaN(na) && !Number.isNaN(nb)) return (na - nb) * dir;
+      const va = a[sort.key];
+      const vb = b[sort.key];
+      const na = Number(va);
+      const nb = Number(vb);
+      if (!Number.isNaN(na) && !Number.isNaN(nb)) {
+        return (na - nb) * dir;
+      }
       return String(va ?? "").localeCompare(String(vb ?? "")) * dir;
     });
     return arr;
   }, [data, sort, sortable]);
 
   // 보더 감지 & 드래그 상태
-  const tableRef  = useRef(null);
-  const scrollRef = useRef(null);        // 가이드선 기준 컨테이너
-  const guideRef  = useRef(null);
-  const dragRef   = useRef({ idx: null, startX: 0, startW: 0 });
-  const rafIdRef  = useRef(null);        // rAF로 드래그 중 렌더 스로틀
+  const tableRef = useRef(null);
+  const scrollRef = useRef(null);   // 가이드 라인 컨테이너
+  const guideRef = useRef(null);
+  const dragRef = useRef({
+    leftIdx: null,
+    rightIdx: null,
+    startX: 0,
+    startLeft: 0,
+    pairTotal: 0,
+  });
+  const rafIdRef = useRef(null);
 
   const nearRightEdge = (ev, el) => {
     const rect = el.getBoundingClientRect();
@@ -122,49 +91,63 @@ const storageKey = useMemo(
     return x - rect.left <= resizeGrab && x - rect.left >= -2;
   };
 
-  // 커서: 보더 근처에서만 col-resize
+  // 커서: 경계 근처에서 col-resize 표시
   const onMouseMove = (e) => {
     const cell = e.target.closest("th,td");
-    if (!cell) { tableRef.current.style.cursor = ""; return; }
+    if (!cell) {
+      if (tableRef.current) tableRef.current.style.cursor = "";
+      return;
+    }
     if (nearRightEdge(e, cell) || (cell.cellIndex > 0 && nearLeftEdge(e, cell))) {
-      tableRef.current.style.cursor = "col-resize";
+      if (tableRef.current) tableRef.current.style.cursor = "col-resize";
     } else {
-      tableRef.current.style.cursor = "";
+      if (tableRef.current) tableRef.current.style.cursor = "";
     }
   };
 
-  // 드래그 시작
+  // 컬럼 리사이즈 시작
   const onPointerDown = (e) => {
     const cell = e.target.closest("th,td");
     if (!cell) return;
 
     const cellIdx = cell.cellIndex;
 
-    // “그 보더의 왼쪽 열”만 타깃
+    // 경계 감지
     let targetIdx = null;
     if (nearRightEdge(e, cell)) {
-      targetIdx = cellIdx;          // 우측 보더 → 현재 셀(왼쪽 열)
+      targetIdx = cellIdx;          // 오른쪽 경계 => 해당 컬럼
     } else if (cellIdx > 0 && nearLeftEdge(e, cell)) {
-      targetIdx = cellIdx - 1;      // 좌측 보더 → 이전 셀(왼쪽 열)
+      targetIdx = cellIdx - 1;      // 왼쪽 경계 => 이전 컬럼
     } else {
-      // 보더가 아니면 헤더 클릭=정렬
+      // 경계가 아니면 정렬 처리
       if (sortable && cell.tagName === "TH") {
         const id = columns[cellIdx]?.id;
-        if (id) setSort(s => s.key !== id ? { key:id, dir:"asc" } : { key:id, dir: s.dir==="asc"?"desc":"asc" });
+        if (id) {
+          setSort((s) =>
+            s.key !== id ? { key: id, dir: "asc" } : { key: id, dir: s.dir === "asc" ? "desc" : "asc" },
+          );
+        }
       }
+      return;
+    }
+
+    const leftIdx = targetIdx;
+    const rightIdx = leftIdx + 1;
+    if (rightIdx >= columns.length) {
+      // 마지막 컬럼 바깥 경계는 리사이즈하지 않음
       return;
     }
 
     e.preventDefault();
 
-    // 가이드선(옵션)
-    if (showGuide && !guideRef.current) {
+    // 가이드 라인 생성
+    if (showGuide && !guideRef.current && scrollRef.current) {
       const guide = document.createElement("div");
       guide.className = "resize-guide";
       scrollRef.current.appendChild(guide);
       guideRef.current = guide;
     }
-    if (showGuide) {
+    if (showGuide && guideRef.current && scrollRef.current) {
       const scrollRect = scrollRef.current.getBoundingClientRect();
       const startX = (e.touches?.[0]?.clientX) ?? e.clientX;
       guideRef.current.style.left = `${startX - scrollRect.left}px`;
@@ -172,27 +155,34 @@ const storageKey = useMemo(
     }
 
     dragRef.current = {
-      idx: targetIdx,
+      leftIdx,
+      rightIdx,
       startX: (e.touches?.[0]?.clientX) ?? e.clientX,
-      startW: widths[targetIdx],
+      startLeft: widths[leftIdx],
+      pairTotal: widths[leftIdx] + widths[rightIdx],
     };
 
     const onMove = (ev) => {
       const doWork = () => {
         rafIdRef.current = null;
-        const x  = (ev.touches?.[0]?.clientX) ?? ev.clientX;
+        const x = (ev.touches?.[0]?.clientX) ?? ev.clientX;
         const dx = x - dragRef.current.startX;
-        const w  = Math.max(minColWidth, Math.round(dragRef.current.startW + dx));
 
-        // ★ 라이브 반영: 드래그 중에도 곧바로 열 폭 업데이트
+        const total = dragRef.current.pairTotal;
+        const min = minColWidth;
+        let left = dragRef.current.startLeft + dx;
+        if (left < min) left = min;
+        if (left > total - min) left = total - min;
+        const right = total - left;
+
         setWidths((prev) => {
-          if (prev[dragRef.current.idx] === w) return prev;
           const next = prev.slice();
-          next[dragRef.current.idx] = w;
+          next[dragRef.current.leftIdx] = left;
+          next[dragRef.current.rightIdx] = right;
           return next;
         });
 
-        if (showGuide) {
+        if (showGuide && guideRef.current && scrollRef.current) {
           const scrollRect = scrollRef.current.getBoundingClientRect();
           guideRef.current.style.left = `${x - scrollRect.left}px`;
         }
@@ -205,17 +195,25 @@ const storageKey = useMemo(
     };
 
     const onUp = (ev) => {
-      // 최종 폭을 저장(로컬스토리지 포함)
-      persist((curr => {
-        const x  = (ev.touches?.[0]?.clientX) ?? ev.clientX;
-        const dx = x - dragRef.current.startX;
-        const w  = Math.max(minColWidth, Math.round(dragRef.current.startW + dx));
-        const next = curr.slice();
-        next[dragRef.current.idx] = w;
-        return next;
-      })(widths));
+      // 최종 너비를 로컬스토리지에 저장
+      persist(
+        ((curr) => {
+          const x = (ev.touches?.[0]?.clientX) ?? ev.clientX;
+          const dx = x - dragRef.current.startX;
+          const total = dragRef.current.pairTotal;
+          const min = minColWidth;
+          let left = dragRef.current.startLeft + dx;
+          if (left < min) left = min;
+          if (left > total - min) left = total - min;
+          const right = total - left;
+          const next = curr.slice();
+          next[dragRef.current.leftIdx] = left;
+          next[dragRef.current.rightIdx] = right;
+          return next;
+        })(widths),
+      );
 
-      if (showGuide) guideRef.current.style.display = "none";
+      if (showGuide && guideRef.current) guideRef.current.style.display = "none";
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
@@ -225,7 +223,13 @@ const storageKey = useMemo(
       window.removeEventListener("mouseup", onUp);
       window.removeEventListener("touchmove", onMove);
       window.removeEventListener("touchend", onUp);
-      dragRef.current = { idx: null, startX: 0, startW: 0 };
+      dragRef.current = {
+        leftIdx: null,
+        rightIdx: null,
+        startX: 0,
+        startLeft: 0,
+        pairTotal: 0,
+      };
     };
 
     window.addEventListener("mousemove", onMove);
@@ -233,6 +237,8 @@ const storageKey = useMemo(
     window.addEventListener("touchmove", onMove, { passive: false });
     window.addEventListener("touchend", onUp, { once: true });
   };
+
+  const totalWidth = widths.reduce((sum, w) => sum + w, 0) || 1;
 
   return (
     <div className="rzTable-wrap">
@@ -245,16 +251,22 @@ const storageKey = useMemo(
           onTouchStart={onPointerDown}
         >
           <colgroup>
-            {widths.map((w, i) => <col key={columns[i].id} style={{ width: `${w}px` }} />)}
+            {widths.map((w, i) => (
+              <col
+                key={columns[i].id}
+                style={{ width: `${(w / totalWidth) * 100}%` }}
+              />
+            ))}
           </colgroup>
 
           <thead>
             <tr>
               {columns.map((c, i) => (
-                <th key={c.id} className={i===0 && stickyFirst ? "sticky-first" : ""}>
+                <th key={c.id} className={i === 0 && stickyFirst ? "sticky-first" : ""}>
                   <div className="rz-th-inner">
                     <span className="rz-title">
-                      {c.title}{sortable && sort.key===c.id && (sort.dir==="asc" ? " ▲" : " ▼")}
+                      {c.title}
+                      {sortable && sort.key === c.id && (sort.dir === "asc" ? " ↑" : " ↓")}
                     </span>
                     <span className="rz-border-visual" />
                   </div>
@@ -264,17 +276,20 @@ const storageKey = useMemo(
           </thead>
           <tbody>
             {sorted.length === 1 && sorted[0]?.__empty ? (
-              <tr key="no-data">
-                <td colSpan={columns.length}
-                  style={{ textAlign: "center", color: "#666", padding: "20px 0" }}>
-                  검색결과가 없습니다.
+              <tr key="no-data" className="no-data">
+                <td
+                  colSpan={columns.length}
+                  style={{ textAlign: "center", color: "#666", padding: "20px 0" }}
+                >
+                  조회 결과가 없습니다.
                 </td>
               </tr>
             ) : (
               sorted.map((row, rIdx) => (
-                <tr key={rIdx} 
-                    className={row._active ? "active" : undefined} 
-                    onClick={() => onRowClick?.(row)}
+                <tr
+                  key={rIdx}
+                  className={row._active ? "active" : undefined}
+                  onClick={() => onRowClick?.(row)}
                 >
                   {columns.map((c, i) => (
                     <td key={c.id} className={i === 0 && stickyFirst ? "sticky-first" : ""}>
@@ -286,9 +301,9 @@ const storageKey = useMemo(
               ))
             )}
           </tbody>
-
         </table>
       </div>
     </div>
   );
 }
+

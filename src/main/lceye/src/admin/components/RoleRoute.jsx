@@ -83,6 +83,7 @@ function LoginCheckingBox() {
         p: 3,
         bgcolor: "#f4f4f4",
       }}
+      className="loginCheckingBox"
     >
       <LinearProgress
         determinate
