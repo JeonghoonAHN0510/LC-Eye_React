@@ -84,17 +84,19 @@ export default function LoingRightSection(props) {
                 </div>
             </div>
             <Snackbar
+                color='danger'
+                variant="soft"
                 open={openAlert}
                 autoHideDuration={3000}
                 onClose={handleCloseAlert}
                 anchorOrigin={{ vertical: 'top', horizontal: 'center' }} // 위치: 상단 중앙
             >
                 <Alert
-                    key="Error"
-                    onClose={handleCloseAlert}
+                    key="Warning"
                     color='danger'
-                    sx={{ width: '100%' }}
-                    variant="filled"
+                    variant="soft"
+                    onClose={handleCloseAlert}
+                    sx={{ width: '100%', fontSize: 17 }}
                 >
                     {errorMessage}
                 </Alert>
