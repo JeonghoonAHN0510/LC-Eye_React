@@ -1,18 +1,23 @@
 import lceye from '../../../assets/img/LC-Eye.svg';
-import Button from '@mui/joy/Button';
-import Input from '@mui/joy/Input';
+import { Button, Input, Alert, Box, Snackbar, Typography } from '@mui/joy';
 import axios from 'axios';
 import { useState } from 'react';
 
-const axiosOption = {withCredentials: true};
+const axiosOption = { withCredentials: true };
 
 export default function LoingRightSection(props) {
     //======================= useState =======================
     const [idInput, setIdInput] = useState('');
     const [pwdInput, setPwdInput] = useState('');
+    const [openAlert, setOpenAlert] = useState(false);
+    const [errorMessage, setErrorMessage] = useState('');
 
     const login = async () => {
-        if (!idInput || !pwdInput) return;
+        if (!idInput || !pwdInput) {
+            setErrorMessage('아이디와 비밀번호를 모두 입력해주세요.');
+            setOpenAlert(true);
+            return;
+        } // if end
         try {
             const obj = {
                 mid: idInput,
@@ -20,9 +25,11 @@ export default function LoingRightSection(props) {
             } // obj end
             const response = await axios.post("http://localhost:8080/api/member/login", obj, axiosOption);
             const data = await response.data;
-            if (data != null) location.href="/project"
+            if (data != null) location.href = "/project"
         } catch (error) {
             console.log(error);
+            setErrorMessage('아이디 또는 비밀번호가 일치하지 않습니다.');
+            setOpenAlert(true);
         } // try-catch end
     } // func end
 
@@ -43,6 +50,10 @@ export default function LoingRightSection(props) {
     const enterKeyEvent = () => {
         if (window.event.keyCode == 13) login();
     } // func end
+
+    const handleCloseAlert = (event, reason) => {
+        setOpenAlert(false); // 알림창 닫기 (false)
+    };
 
     return (
         <>
@@ -72,6 +83,22 @@ export default function LoingRightSection(props) {
 
                 </div>
             </div>
+            <Snackbar
+                open={openAlert}
+                autoHideDuration={3000}
+                onClose={handleCloseAlert}
+                anchorOrigin={{ vertical: 'top', horizontal: 'center' }} // 위치: 상단 중앙
+            >
+                <Alert
+                    key="Error"
+                    onClose={handleCloseAlert}
+                    color='danger'
+                    sx={{ width: '100%' }}
+                    variant="filled"
+                >
+                    {errorMessage}
+                </Alert>
+            </Snackbar>
         </>
     ) // return end
 } // func end
