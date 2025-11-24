@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import axios from "axios";
 import Checkbox from "@mui/joy/Checkbox";
@@ -9,33 +10,49 @@ import Box from "@mui/joy/Box";
 import Select from "@mui/joy/Select";
 import Option from "@mui/joy/Option";
 import { useSelector } from "react-redux";
+import { useQuery } from "@tanstack/react-query";
 import ProjectListTable from "./ProjectListTable.jsx";
 import useUnits from "../../hooks/useUnits";
 import "../../../assets/css/ProjectExchange.css";
 import { useLoading } from "../../contexts/LoadingContext.jsx";
 
 export default function ProjectExchange(props) {
+    // 부모 컴포넌트로부터 전달받은 props
+    // - pjno: 특정 프로젝트 번호 (없으면 Redux의 selectedProject에서 가져옴)
+    // - isOpen: 모달 열림 여부
+    // - onCalcSuccess: 계산 완료 후 부모에 알려주기 위한 콜백
     const { pjno, isOpen, onCalcSuccess } = props;
 
+    // Redux에서 현재 선택된 프로젝트 정보 가져오기
     const selectedProject = useSelector(
         (state) => state.project?.selectedProject
     );
+
+    // 프로젝트 번호 결정: props → Redux → null 순으로 우선순위 적용
     const effectivePjno = pjno ?? selectedProject?.pjno ?? null;
+
+    // 커스텀 hook: DB에서 단위(unit) 목록 가져오기
     const { units } = useUnits();
+
+    // 전역 로딩 UI를 제어하는 커스텀 hook
     const { showLoading, hideLoading } = useLoading();
 
+
+    // ■ 최초 Input 행 1개 생성하는 함수
+    //   - 화면 초기 렌더링 시 기본 한 줄을 제공하기 위함
     const createInitialInputRows = () => [
         {
-            id: 1,
-            pjename: "",
-            pjeamount: "",
-            uname: "",
-            uno: null,
-            pname: "",
-            isInput: true,
+            id: 1,          // 로컬 UI에서 사용되는 key 값
+            pjename: "",    // 물질명
+            pjeamount: "",  // 양
+            uname: "",      // 단위명
+            uno: null,      // 단위 번호
+            pname: "",      // 자동 매핑된 프로세스명
+            isInput: true,  // input 구분
         },
     ];
 
+    // ■ 최초 Output 행 생성
     const createInitialOutputRows = () => [
         {
             id: 1,
@@ -44,38 +61,88 @@ export default function ProjectExchange(props) {
             uname: "",
             uno: null,
             pname: "",
-            isInput: false,
+            isInput: false, // output 구분
         },
     ];
 
+    // 화면에서 실시간 편집되고 있는 Input 행들
     const [inputRows, setInputRows] = useState(createInitialInputRows);
+
+    // 화면에서 실시간 편집되고 있는 Output 행들
     const [outputRows, setOutputRows] = useState(createInitialOutputRows);
+
+    // 서버에서 가져온 원본 Input 행 (되돌리기, 비교용)
     const [originalInputRows, setOriginalInputRows] = useState(
         createInitialInputRows
     );
+
+    // 서버에서 가져온 원본 Output 행 (되돌리기, 비교용)
     const [originalOutputRows, setOriginalOutputRows] = useState(
         createInitialOutputRows
     );
 
+    // 자동 매핑 결과 선택 모달 열림 여부
     const [openModal, setOpenModal] = useState(false);
+
+    // 자동 매핑된 후보 리스트(JSON)
+    // 예: 입력한 물질명에 대해 90% 이상 유사한 프로세스들
     const [matchData, setMatchData] = useState([]);
+
+    // 체크박스 선택 상태 저장용 객체
+    // { 1: true, 3: false, ... }
     const [checkedItems, setCheckedItems] = useState({});
+
+    // 로컬 로딩 스피너 상태
     const [loading, setLoading] = useState(false);
 
+    // Input 영역 체크박스 선택 리스트
     const [inputCheckedList, setInputCheckedList] = useState([]);
+
+    // Output 영역 체크박스 선택 리스트
     const [outputCheckedList, setOutputCheckedList] = useState([]);
 
+    // Input 전체선택 상태 계산
+    // 모든 행의 체크박스가 선택되어 있어야 true
     const inputChecked =
         inputRows.length > 0 && inputCheckedList.length === inputRows.length;
+
+    // Output 전체선택 상태 계산
     const outputChecked =
         outputRows.length > 0 && outputCheckedList.length === outputRows.length;
+
+    // Select(단위 선택 드롭다운)에 사용할 옵션 목록 생성
+    // units 배열을 UI에서 필요한 형태로 변환
+    // 예: { value: 1, label: "kg", group: "Mass" }
     const unitOptions = units.map((u) => ({
-        value: u.uno,
-        label: u.unit,
-        group: u.ugname,
+        value: u.uno,        // DB의 unit 번호
+        label: u.unit,       // 표시 이름
+        group: u.ugname,     // 단위 그룹명 (예: Length, Mass)
     }));
 
-    // Input 체크 핸들러 ==============================================================
+    // 행 데이터 정규화 함수 =============================================================
+    const normalizeRows = (rows = []) =>
+        rows.map((r) => ({
+            id: r.id,
+            pjename: r.pjename ?? "",
+            pjeamount: String(r.pjeamount ?? ""),
+            uname: r.uname ?? "",
+            uno: r.uno ?? null,
+            pname: r.pname ?? "",
+            isInput: !!r.isInput,
+        }));
+
+    // 변경 여부 확인 함수 =============================================================
+    const isDirty = () => {
+        const currInput = JSON.stringify(normalizeRows(inputRows));
+        const currOutput = JSON.stringify(normalizeRows(outputRows));
+        const originalInput = JSON.stringify(normalizeRows(originalInputRows));
+        const originalOutput = JSON.stringify(
+            normalizeRows(originalOutputRows)
+        );
+        return currInput !== originalInput || currOutput !== originalOutput;
+    };
+
+    // Input 전체선택 처리 함수 =============================================================
     const handleCheckAllInput = (checked) => {
         if (checked) {
             setInputCheckedList(inputRows.map((row) => row.id));
@@ -84,7 +151,7 @@ export default function ProjectExchange(props) {
         }
     };
 
-    // Output 체크 핸들러 =============================================================
+    // Output 전체선택 처리 함수 =============================================================
     const handleCheckAllOutput = (checked) => {
         if (checked) {
             setOutputCheckedList(outputRows.map((row) => row.id));
@@ -92,7 +159,7 @@ export default function ProjectExchange(props) {
             setOutputCheckedList([]);
         }
     };
-
+    // 개별 행 선택 처리 함수 =============================================================
     const handleCheckInput = (id) => {
         setInputCheckedList((prev) =>
             prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
@@ -105,7 +172,7 @@ export default function ProjectExchange(props) {
         );
     };
 
-    // 단위 적용 함수 =========================================================
+    // 단위 적용 함수 =============================================================
     const applyUnitToRow = (isInput, rowId, newUno) => {
         const picked = units.find((u) => u.uno === newUno);
         const updater = (prev) =>
@@ -121,7 +188,7 @@ export default function ProjectExchange(props) {
         (isInput ? setInputRows : setOutputRows)(updater);
     };
 
-    // 행 추가 함수 =========================================================
+    // 행 추가 함수 =============================================================
     const addInputRow = () => {
         const newId =
             inputRows.length > 0
@@ -160,7 +227,7 @@ export default function ProjectExchange(props) {
         ]);
     };
 
-    // 셀 값 변경 핸들러 =========================================================
+    // 행 데이터 변경 처리 함수 =============================================================
     const inputHandleChange = (id, field, value) => {
         setInputRows((prev) =>
             prev.map((row) => (row.id === id ? { ...row, [field]: value } : row))
@@ -173,7 +240,7 @@ export default function ProjectExchange(props) {
         );
     };
 
-    // 매칭 함수 =========================================================
+    // 매칭 처리 함수 =============================================================
     const matchIO = async (pjenames) => {
         try {
             const response = await axios.post(
@@ -204,16 +271,16 @@ export default function ProjectExchange(props) {
         }
     };
 
-    // 전체 매칭 함수 =========================================================
+    // 매칭 전체 처리 함수 =============================================================
     const matchAllIO = async () => {
-        const loadingId = showLoading("최적 데이터베이스를 추천합니다.");
+        const loadingId = showLoading("최적화 매칭중입니다...");
         setLoading(true);
         const allPjenames = [...inputRows, ...outputRows].map(
             (row) => row.pjename
         );
 
         if (allPjenames.length === 0 || allPjenames.includes("")) {
-            alert("매칭할 투입물·산출물 이름을 모두 입력해 주세요.");
+            alert("명칭을 모두 입력해주세요.");
             setLoading(false);
             hideLoading(loadingId);
             return;
@@ -223,9 +290,9 @@ export default function ProjectExchange(props) {
         hideLoading(loadingId);
     };
 
-    // 선택 매칭 함수 =========================================================
+    // 매칭 선택 처리 함수 =============================================================
     const matchSelectedIO = async () => {
-        const loadingId = showLoading("최적화 데이터베이스를 추천합니다.");
+        const loadingId = showLoading("선택된 항목 매칭중입니다...");
         setLoading(true);
 
         const selectedInputs = inputRows.filter((r) =>
@@ -237,7 +304,7 @@ export default function ProjectExchange(props) {
         const selected = [...selectedInputs, ...selectedOutputs];
 
         if (selected.length === 0) {
-            alert("선택된 항목이 없습니다.");
+            alert("매칭할 항목을 선택해주세요.");
             setLoading(false);
             hideLoading(loadingId);
             return;
@@ -245,7 +312,7 @@ export default function ProjectExchange(props) {
 
         const pjenames = selected.map((s) => s.pjename);
         if (pjenames.includes("")) {
-            alert("선택된 항목 중 이름이 비어 있습니다.");
+            alert("명칭을 모두 입력해주세요.");
             setLoading(false);
             hideLoading(loadingId);
             return;
@@ -255,7 +322,7 @@ export default function ProjectExchange(props) {
         hideLoading(loadingId);
     };
 
-    // 매칭값 체크 핸들러 =====================================================
+    // 개별 행 선택 처리 함수 ========================================================
     const handleCheckValue = (key, value) => {
         setCheckedItems((prev) => ({
             ...prev,
@@ -279,10 +346,10 @@ export default function ProjectExchange(props) {
         setOpenModal(false);
     };
 
-    // 초기화 함수 =========================================================
+    // 정보 초기화 함수 =========================================================
     const clearIOInfo = async () => {
         if (!effectivePjno) {
-            alert("프로젝트 번호가 없습니다.");
+            alert("프로젝트 번호를 선택해주세요.");
             return;
         }
         try {
@@ -295,23 +362,23 @@ export default function ProjectExchange(props) {
             );
             const data = response.data;
             if (data) {
-                alert("초기화되었습니다.");
+                alert("정보가 초기화되었습니다.");
                 setInputRows([]);
                 setOutputRows([]);
                 setInputCheckedList([]);
                 setOutputCheckedList([]);
             } else {
-                alert("초기화에 실패했습니다.");
+                alert("정보 초기화에 실패했습니다.");
             }
         } catch (e) {
             console.error("[clearIOInfo error]", e);
         }
     };
 
-    // 삭제 함수 =========================================================
+    // 행 삭제 처리 함수 =========================================================
     const deleteInputRows = () => {
         if (inputCheckedList.length === 0) {
-            alert("삭제할 항목을 선택해 주세요.");
+            alert("삭제할 항목을 선택해주세요.");
             return;
         }
         setInputRows((prev) =>
@@ -322,7 +389,7 @@ export default function ProjectExchange(props) {
 
     const deleteOutputRows = () => {
         if (outputCheckedList.length === 0) {
-            alert("삭제할 항목을 선택해 주세요.");
+            alert("삭제할 항목을 선택해주세요.");
             return;
         }
         setOutputRows((prev) =>
@@ -336,7 +403,7 @@ export default function ProjectExchange(props) {
         const hasOutput = outputCheckedList.length > 0;
 
         if (!hasInput && !hasOutput) {
-            alert("삭제할 항목을 선택해 주세요.");
+            alert("삭제할 항목을 선택해주세요.");
             return;
         }
 
@@ -344,10 +411,10 @@ export default function ProjectExchange(props) {
         if (hasOutput) deleteOutputRows();
     };
 
-    // 저장 함수 =========================================================
+    // 정보 저장 함수 =========================================================
     const saveIOInfo = async () => {
         if (!effectivePjno) {
-            alert("프로젝트 번호가 없습니다.");
+            alert("프로젝트 번호를 선택해주세요.");
             return;
         }
 
@@ -364,100 +431,76 @@ export default function ProjectExchange(props) {
             );
             const data = response.data;
             if (data) {
-                alert("저장되었습니다.");
+                alert("정보가 저장되었습니다.");
                 setOriginalInputRows(inputRows);
                 setOriginalOutputRows(outputRows);
             } else {
-                alert("저장에 실패하였습니다.");
+                alert("정보 저장에 실패했습니다.");
             }
         } catch (e) {
             console.error("[saveIOInfo error]", e);
         }
     };
 
-    // 변경 감지 함수 =========================================================
-    const normalizeRows = (rows = []) =>
-        rows.map((r) => ({
-            id: r.id,
-            pjename: r.pjename ?? "",
-            pjeamount: String(r.pjeamount ?? ""),
-            uname: r.uname ?? "",
-            uno: r.uno ?? null,
-            pname: r.pname ?? "",
-            isInput: !!r.isInput,
-        }));
+    const fetchProjectExchange = async (pjnoParam) => {
+        const res = await axios.get("http://localhost:8081/api/inout", {
+            params: { pjno: pjnoParam },
+            withCredentials: true,
+        });
 
-    // 변경 여부 확인 함수 =========================================================
-    const isDirty = () => {
-        const currInput = JSON.stringify(normalizeRows(inputRows));
-        const currOutput = JSON.stringify(normalizeRows(outputRows));
-        const originalInput = JSON.stringify(normalizeRows(originalInputRows));
-        const originalOutput = JSON.stringify(
-            normalizeRows(originalOutputRows)
-        );
-        return currInput !== originalInput || currOutput !== originalOutput;
+        const inputList = Array.isArray(res?.data?.inputList)
+            ? res.data.inputList
+            : [];
+        const outputList = Array.isArray(res?.data?.outputList)
+            ? res.data.outputList
+            : [];
+        return { inputList, outputList };
     };
 
-    // 데이터 불러오기 =========================================================
-    const readInOut = async (pjnoParam) => {
-        if (!pjnoParam) return;
-        const loadingId = showLoading("로딩중입니다.");
-        try {
-            const res = await axios.get("http://localhost:8081/api/inout", {
-                params: { pjno: pjnoParam },
-                withCredentials: true,
-            });
-
-            const inputList = Array.isArray(res?.data?.inputList)
-                ? res.data.inputList
-                : [];
-            const outputList = Array.isArray(res?.data?.outputList)
-                ? res.data.outputList
-                : [];
-            const unitNameToUno = new Map(
-                units.map((u) => [u.unit, u.uno])
-            );
-
-            const mappedInput = inputList.map((item, index) => ({
-                id: index + 1,
-                pjename: item.pjename ?? "",
-                pjeamount: item.pjeamount ?? "",
-                uname: item.uname ?? "",
-                uno: unitNameToUno.get(item.uname ?? "") ?? null,
-                pname: item.pname ?? "",
-                isInput: item.isInput ?? true,
-            }));
-
-            const mappedOutput = outputList.map((item, index) => ({
-                id: index + 1,
-                pjename: item.pjename ?? "",
-                pjeamount: item.pjeamount ?? "",
-                uname: item.uname ?? "",
-                uno: unitNameToUno.get(item.uname ?? "") ?? null,
-                pname: item.pname ?? "",
-                isInput: item.isInput ?? false,
-            }));
-
-            setInputRows(mappedInput);
-            setOutputRows(mappedOutput);
-            setOriginalInputRows(mappedInput);
-            setOriginalOutputRows(mappedOutput);
-            setInputCheckedList([]);
-            setOutputCheckedList([]);
-        } catch (e) {
-            console.error("[readInOut error]", e);
-        } finally {
-            hideLoading(loadingId);
-        }
-    };
+    const { data: exchangeData } = useQuery({
+        queryKey: ["project", effectivePjno, "exchange"],
+        queryFn: () => fetchProjectExchange(effectivePjno),
+        enabled: isOpen && !!effectivePjno,
+        staleTime: 1000 * 30,
+        refetchOnWindowFocus: false,
+    });
 
     useEffect(() => {
-        if (isOpen && effectivePjno) {
-            readInOut(effectivePjno);
-        }
-    }, [isOpen, effectivePjno]);
+        if (!isOpen || !effectivePjno) return;
+        if (!exchangeData) return;
+        if (isDirty()) return;
 
-    // 아코디언이 접힐 때 행들을 초기 상태로 되돌리기 =========================================================
+        const unitNameToUno = new Map(units.map((u) => [u.unit, u.uno]));
+
+        const mappedInput = exchangeData.inputList.map((item, index) => ({
+            id: index + 1,
+            pjename: item.pjename ?? "",
+            pjeamount: item.pjeamount ?? "",
+            uname: item.uname ?? "",
+            uno: unitNameToUno.get(item.uname ?? "") ?? null,
+            pname: item.pname ?? "",
+            isInput: item.isInput ?? true,
+        }));
+
+        const mappedOutput = exchangeData.outputList.map((item, index) => ({
+            id: index + 1,
+            pjename: item.pjename ?? "",
+            pjeamount: item.pjeamount ?? "",
+            uname: item.uname ?? "",
+            uno: unitNameToUno.get(item.uname ?? "") ?? null,
+            pname: item.pname ?? "",
+            isInput: item.isInput ?? false,
+        }));
+
+        setInputRows(mappedInput);
+        setOutputRows(mappedOutput);
+        setOriginalInputRows(mappedInput);
+        setOriginalOutputRows(mappedOutput);
+        setInputCheckedList([]);
+        setOutputCheckedList([]);
+    }, [exchangeData, isOpen, effectivePjno, units]);
+
+    // 정보 초기화 함수 =========================================================
     useEffect(() => {
         if (!isOpen) {
             setInputRows(createInitialInputRows());
@@ -488,17 +531,17 @@ export default function ProjectExchange(props) {
         );
     }, [units]);
 
-    // 계산 함수 =========================================================
+    // LCI 계산 함수 =========================================================
     const calcLCI = async () => {
         if (!effectivePjno) {
-            alert("프로젝트 번호가 없습니다.");
+            alert("프로젝트 번호를 선택해주세요.");
             return;
         }
         if (isDirty()) {
-            alert("저장 후 다시 [계산]을 눌러주세요.");
+            alert("정보가 변경되었습니다. 저장 후 다시 시도해주세요.");
             return;
         }
-        const loadingId = showLoading("계산중입니다.");
+        const loadingId = showLoading("LCI 계산 중입니다.");
         try {
             const res = await axios.get(
                 `http://localhost:8081/api/lci/calc`,
@@ -511,17 +554,17 @@ export default function ProjectExchange(props) {
             if (ok) {
                 onCalcSuccess?.();
             } else {
-                alert("계산에 실패하였습니다. [관리자에게 문의]");
+                alert("LCI 계산에 실패했습니다.");
             }
         } catch (e) {
             console.error("[calcLCI error]", e);
-            alert("계산에 실패하였습니다. [관리자에게 문의]");
+            alert("LCI 계산에 실패했습니다.");
         } finally {
             hideLoading(loadingId);
         }
     };
 
-    // 테이블 컬럼 및 데이터 ==================================================
+    // 입력 컬럼 ===================================================
     const inputColumns = [
         {
             id: "_select",
@@ -540,7 +583,7 @@ export default function ProjectExchange(props) {
         { id: "pjename", title: "투입물명", width: 100 },
         { id: "pjeamount", title: "투입량", width: 100 },
         { id: "uname", title: "단위", width: 100 },
-        { id: "pname", title: "매칭 이름", width: 200 },
+        { id: "pname", title: "프로세스명", width: 200 },
     ];
 
     const outputColumns = [
@@ -561,10 +604,10 @@ export default function ProjectExchange(props) {
         { id: "pjename", title: "산출물명", width: 100 },
         { id: "pjeamount", title: "산출량", width: 100 },
         { id: "uname", title: "단위", width: 100 },
-        { id: "pname", title: "매칭 이름", width: 200 },
+        { id: "pname", title: "프로세스명", width: 200 },
     ];
 
-    // Input 테이블 데이터 ==================================================
+    // 투입물 입력 데이터 ===================================================
     const inputTableData =
         inputRows.length > 0
             ? inputRows.map((row, index) => ({
@@ -638,7 +681,7 @@ export default function ProjectExchange(props) {
             }))
             : [{ __empty: true }];
 
-    // Output 테이블 데이터 ==================================================
+    // 산출물 입력 데이터 ==================================================
     const outputTableData =
         outputRows.length > 0
             ? outputRows.map((row, index) => ({
@@ -740,7 +783,7 @@ export default function ProjectExchange(props) {
                         level="h6"
                         sx={{ marginBottom: 2, textAlign: "center" }}
                     >
-                        매칭 결과
+                        매칭 추천
                     </Typography>
                     {Array.isArray(matchData) &&
                         matchData.map((item) => (
@@ -825,7 +868,7 @@ export default function ProjectExchange(props) {
                             color="primary"
                             onClick={handleSaveMatch}
                         >
-                            적용
+                            매칭 저장
                         </Button>
                         <Button
                             variant="outlined"
@@ -842,13 +885,13 @@ export default function ProjectExchange(props) {
                     onClick={matchSelectedIO}
                     disabled={loading}
                 >
-                    {loading ? "매칭 중..." : "선택 매칭"}
+                    {loading ? "매칭 추천 중.." : "선택 추천"}
                 </Button>
                 <Button variant="outlined"
                     onClick={matchAllIO}
                     disabled={loading}
                 >
-                    {loading ? "매칭 중..." : "전체 매칭"}
+                    {loading ? "매칭 추천 중.." : "자동 추천"}
                 </Button>
                 <Button variant="outlined"
                     onClick={saveIOInfo}
@@ -858,7 +901,7 @@ export default function ProjectExchange(props) {
                 <Button variant="outlined"
                     onClick={calcLCI}
                 >
-                    계산
+                    LCI 계산
                 </Button>
                 <Button variant="outlined"
                     onClick={handleDelete}
