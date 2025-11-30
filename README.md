@@ -1,6 +1,6 @@
 -----
 
-# ⚛️ LC-Eye Client – LCI 계산 플랫폼 웹 애플리케이션
+# ⚛️ LC-Eye Client – LCI 계산 플랫폼 웹
 
 > **LC-Eye 플랫폼의 사용자 경험(UX)을 담당하는 React 기반 Single Page Application (SPA)**  <br>
 > 🔗 프로젝트Notion [바로가기](https://lceye.notion.site/LC-Eye-2a2094d4983480369aa4fe1a6163688f) <br>
